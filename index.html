@@ -350,54 +350,68 @@
     }
 
     // --- CORE LOGIC CHANGE: WEIGHTED SCORE ---
+    // --- UPDATED: USER SUMMARY LOGIC WITH HINT PENALTY ---
     async function updateUserSummary(isWin) {
         if (!supabaseClient) return;
-
+    
         const playerName = currentState.playerName;
         const currentDifficulty = currentState.difficulty;
         
-        // Calculate points gained for this match: 0 if loss, or difficulty level if win
-        const pointsGained = isWin ? currentDifficulty : 0; 
-
+        let pointsGained = 0;
+    
+        if (isWin) {
+            if (currentState.hintUsed) {
+                // Rule: Win occurred, but hint was used. No score added.
+                pointsGained = 0;
+                console.log(`Score update: Player ${playerName} won but used hint. Score penalty applied.`);
+            } else {
+                // Rule: Win occurred, and hint was NOT used. Add full difficulty points.
+                pointsGained = currentDifficulty;
+                console.log(`Score update: Player ${playerName} won without hint. Gained ${pointsGained} points.`);
+            }
+        } else {
+            // Rule: Lost the game. No score added.
+            pointsGained = 0;
+        }
+    
         try {
             let { data: userData, error: fetchError } = await supabaseClient
                 .from('users_summary')
                 .select('*')
                 .eq('name', playerName)
                 .single();
-
+        
             if (fetchError && fetchError.code !== 'PGRST116') { 
                  throw fetchError;
             }
-
+        
             const isNewUser = !userData;
             
-            // Get existing score and wins
+            // Get existing score
             const existingWeightedScore = isNewUser ? 0 : userData.weighted_score;
             const existingTotalWins = isNewUser ? 0 : userData.total_wins;
-
+        
             let updatePayload = {
                 name: playerName,
                 total_matches: (isNewUser ? 0 : userData.total_matches) + 1,
                 
-                // NEW: Add points gained to the existing weighted score
+                // ADD the calculated pointsGained (0 or Difficulty)
                 weighted_score: existingWeightedScore + pointsGained,
                 
-                // Still tracking total wins for detail
+                // Total wins still increments whether or not the hint was used (A win is still a win)
                 total_wins: existingTotalWins + (isWin ? 1 : 0),
             };
-
+        
             const { error: upsertError } = await supabaseClient
                 .from('users_summary')
                 .upsert(updatePayload, { onConflict: 'name' }); 
-
+        
             if (upsertError) throw upsertError;
-
+        
         } catch (e) {
             console.error("Error updating user summary:", e);
         }
     }
-
     // --- CORE FUNCTIONS ---
     function startGame() {
         const nameInput = document.getElementById('player-name');
