@@ -299,7 +299,7 @@
         mistakes: 0, 
         maxMistakes: 6, 
         status: 'playing',
-        hintUsed: false // NEW STATE VARIABLE
+        hintUsed: false 
     };
 
     // --- UTILS ---
@@ -312,30 +312,23 @@
         document.getElementById('loading').style.display = show ? 'flex' : 'none';
     }
     
-    // NEW UTILITY FOR UI FEEDBACK
     function setStatusMessage(message, cssVariable) {
         const msgEl = document.getElementById('status-msg');
-        
-        // Clear previous animation (needed to re-trigger)
         msgEl.classList.remove('status-animate'); 
         
-        // Use setTimeout to force DOM reflow before adding the class back
         setTimeout(() => {
             msgEl.textContent = message;
-
-            // FIX: Set the color property using the var() function call
             msgEl.style.color = `var(${cssVariable})`; 
-
             msgEl.classList.add('status-animate');
         }, 50); 
     }
 
-    // --- NEW: RENDER HINT BUTTON ---
+    // --- HINT LOGIC ---
     function renderHintButton() {
         const hintBtnContainer = document.getElementById('hint-btn-container');
-        hintBtnContainer.innerHTML = ''; // Clear previous button/message
+        if (!hintBtnContainer) return; 
+        hintBtnContainer.innerHTML = '';
         
-        // Show button if only one chance remains AND hint hasn't been used
         if (currentState.mistakes === currentState.maxMistakes - 1 && !currentState.hintUsed) {
             const btn = document.createElement('button');
             btn.className = 'btn btn-secondary';
@@ -347,20 +340,66 @@
         }
     }
 
-    // --- NEW: USE HINT LOGIC ---
     function useHint() {
         if (currentState.status !== 'playing' || currentState.hintUsed) return;
 
         const hint = wordHints[currentState.word];
-        setStatusMessage(`Hint: ${hint}`, '--accent'); // Use accent color for hint
-        currentState.hintUsed = true; // Mark hint as used
-        renderHintButton(); // Hide the button
+        setStatusMessage(`Hint: ${hint}`, '--accent'); 
+        currentState.hintUsed = true; 
+        renderHintButton(); 
     }
 
+    // --- CORE LOGIC CHANGE: WEIGHTED SCORE ---
+    async function updateUserSummary(isWin) {
+        if (!supabaseClient) return;
+
+        const playerName = currentState.playerName;
+        const currentDifficulty = currentState.difficulty;
+        
+        // Calculate points gained for this match: 0 if loss, or difficulty level if win
+        const pointsGained = isWin ? currentDifficulty : 0; 
+
+        try {
+            let { data: userData, error: fetchError } = await supabaseClient
+                .from('users_summary')
+                .select('*')
+                .eq('name', playerName)
+                .single();
+
+            if (fetchError && fetchError.code !== 'PGRST116') { 
+                 throw fetchError;
+            }
+
+            const isNewUser = !userData;
+            
+            // Get existing score and wins
+            const existingWeightedScore = isNewUser ? 0 : userData.weighted_score;
+            const existingTotalWins = isNewUser ? 0 : userData.total_wins;
+
+            let updatePayload = {
+                name: playerName,
+                total_matches: (isNewUser ? 0 : userData.total_matches) + 1,
+                
+                // NEW: Add points gained to the existing weighted score
+                weighted_score: existingWeightedScore + pointsGained,
+                
+                // Still tracking total wins for detail
+                total_wins: existingTotalWins + (isWin ? 1 : 0),
+            };
+
+            const { error: upsertError } = await supabaseClient
+                .from('users_summary')
+                .upsert(updatePayload, { onConflict: 'name' }); 
+
+            if (upsertError) throw upsertError;
+
+        } catch (e) {
+            console.error("Error updating user summary:", e);
+        }
+    }
 
     // --- CORE FUNCTIONS ---
     function startGame() {
-        setStatusMessage("", '--text');
         const nameInput = document.getElementById('player-name');
         const diffSelect = document.getElementById('difficulty');
 
@@ -379,7 +418,7 @@
         currentState.guessed = [];
         currentState.mistakes = 0;
         currentState.status = 'playing';
-        currentState.hintUsed = false; // Reset hint status
+        currentState.hintUsed = false; 
 
         // Update UI
         document.getElementById('display-name').textContent = currentState.playerName;
@@ -395,7 +434,7 @@
 
         renderWord();
         renderKeyboard();
-        renderHintButton(); // Ensure button is hidden at start
+        renderHintButton();
         switchScreen('game');
     }
 
@@ -429,16 +468,14 @@
         if (!currentState.word.includes(letter)) {
             document.getElementById(`part-${currentState.mistakes}`).style.display = 'block';
             currentState.mistakes++;
-            
             setStatusMessage("Ouch!", '--primary');
-
         } else {
             setStatusMessage("Nice!", '--secondary');
         }
 
         renderWord();
         renderKeyboard();
-        renderHintButton(); // Check if the button needs to appear
+        renderHintButton(); 
 
         if (currentState.word.split('').every(l => currentState.guessed.includes(l))) endGame(true);
         else if (currentState.mistakes >= currentState.maxMistakes) endGame(false);
@@ -449,17 +486,21 @@
         
         if (supabaseClient) {
             toggleLoader(true);
+            
+            // 1. Update the dedicated summary table
+            await updateUserSummary(isWin);
+
+            // 2. Insert the detailed game log
             try {
-                 // Pass the new hintUsed state to the database
                  await supabaseClient.from('game_history').insert({
                     player_name: currentState.playerName,
                     result: currentState.status,
                     word: currentState.word,
                     difficulty: currentState.difficulty.toString(),
-                    hint_used: currentState.hintUsed // NEW COLUMN INSERTED
+                    hint_used: currentState.hintUsed 
                 });
             } catch (e) {
-                console.error("Supabase Save Error:", e);
+                console.error("Supabase Game History Save Error:", e);
             }
             toggleLoader(false);
         }
@@ -469,6 +510,7 @@
         switchScreen('end');
     }
 
+    // --- LEADERBOARD: NOW SORTING BY WEIGHTED SCORE ---
     async function showLeaderboard() {
         if (!supabaseClient) {
             alert("Database not connected. Cannot fetch leaderboard.");
@@ -476,13 +518,12 @@
         }
         
         toggleLoader(true);
-        // Fetch the hint_used column to display on the leaderboard
         const { data, error } = await supabaseClient
-            .from('game_history')
-            .select('player_name, difficulty, word, hint_used') 
-            .eq('result', 'won')
-            .order('difficulty', { ascending: false })
-            .order('created_at', { ascending: false })
+            .from('users_summary')
+            .select('*') 
+            // NEW SORT: weighted_score is now the primary ranking metric
+            .order('weighted_score', { ascending: false }) 
+            .order('total_wins', { ascending: false })
             .limit(10);
         toggleLoader(false);
 
@@ -490,25 +531,30 @@
         container.innerHTML = '';
         
         if (error) {
-             container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks.</p>";
+             container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks. (Check RLS on users_summary table)</p>";
              console.error("Leaderboard Fetch Error:", error);
         } else if (data && data.length) {
             const ul = document.createElement('ul');
             ul.className = 'leaderboard-list';
             data.forEach((entry, i) => {
-                const hintStatus = entry.hint_used ? '💡 Used Hint' : '✅ No Hint'; // Display hint status
                 const li = document.createElement('li');
                 li.className = 'leaderboard-item';
                 li.innerHTML = `
-                    <span>#${i+1} <strong>${entry.player_name}</strong></span> 
-                    <span>Lvl ${entry.difficulty} (${entry.word})</span>
-                    <span style="font-size: 0.8rem; color: #636e72;">${hintStatus}</span>
+                    <div style="flex-basis: 30%;">
+                        #${i+1} <strong>${entry.name}</strong>
+                    </div>
+                    <div style="flex-basis: 45%; text-align: center; color: var(--primary); font-size: 1.2rem; font-weight: 900;">
+                        ⭐ Score: ${entry.weighted_score}
+                    </div>
+                    <div style="flex-basis: 25%; text-align: right;">
+                        🏆 Wins: ${entry.total_wins}
+                    </div>
                 `;
                 ul.appendChild(li);
             });
             container.appendChild(ul);
         } else {
-            container.innerHTML = "<p style='font-weight: bold;'>No winners yet! Set the high score!</p>";
+            container.innerHTML = "<p style='font-weight: bold;'>No players yet! Play a game to be the first!</p>";
         }
         switchScreen('leaderboard');
     }
