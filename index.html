@@ -229,7 +229,8 @@
             <span id="display-name"></span>
             <span>Level <span id="display-diff"></span></span>
         </div>
-        
+        <div id="hint-btn-container" style="min-height: 40px; margin-top: 10px;">
+        </div>
         <svg class="hangman-drawing" viewBox="0 0 200 200">
             <line x1="20" y1="190" x2="180" y2="190" class="base-draw"/>
             <line x1="50" y1="190" x2="50" y2="20" class="base-draw"/>
@@ -264,9 +265,7 @@
 </div>
 
 <script>
-    // --- SUPABASE CONFIGURATION (FROM PREVIOUS STEP) ---
-    
-    
+    // --- SUPABASE CONFIGURATION ---
     const SUPABASE_URL = 'https://nxodlukpeflttnlzyqiu.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54b2RsdWtwZWZsdHRubHp5cWl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3OTczNTYsImV4cCI6MjA4MTM3MzM1Nn0.MG1a95bPWMgP32yZ240-XXxYm_DPx2D8Tkb8eZygPlM';
     
@@ -284,8 +283,23 @@
         5: ["PNEUMONIA", "RHYTHM", "SPHINX", "JAZZ", "VORTEX", "QUARTZ"]
     };
 
+    const wordHints = {
+        "CAT": "A furry pet that meows.", "DOG": "Man's best friend.", "SUN": "Rises in the east.", "BOX": "A container with four sides.", "SKY": "It is blue during the day.", "RED": "A primary color.", "FOX": "A quick, sly animal.",
+        "APPLE": "A popular fruit often red or green.", "TIGER": "A large striped cat.", "HOUSE": "Where you live.", "CHAIR": "You sit on this.", "TABLE": "Where you eat meals.", "SMILE": "Shows you are happy.",
+        "PLANET": "Earth is one of these.", "JUNGLE": "A dense tropical forest.", "SILVER": "A precious metal, not gold.", "DOCTOR": "A person who treats the sick.", "WINDOW": "You look outside through this.", "SUMMER": "The hottest season.",
+        "PYRAMID": "Found in Egypt.", "BICYCLE": "Two wheels, you pedal it.", "CALENDAR": "Used to track dates.", "OCTOPUS": "A sea animal with 8 arms.", "DIAMOND": "A very hard, valuable gemstone.",
+        "PNEUMONIA": "A lung infection.", "RHYTHM": "Pattern of musical sounds.", "SPHINX": "Mythical creature with a human head.", "JAZZ": "A famous music genre, often improvised.", "VORTEX": "A whirling mass of fluid or air.", "QUARTZ": "A common mineral.",
+    };
+
     let currentState = {
-        playerName: "", difficulty: 3, word: "", guessed: [], mistakes: 0, maxMistakes: 6, status: 'playing' 
+        playerName: "", 
+        difficulty: 3, 
+        word: "", 
+        guessed: [], 
+        mistakes: 0, 
+        maxMistakes: 6, 
+        status: 'playing',
+        hintUsed: false // NEW STATE VARIABLE
     };
 
     // --- UTILS ---
@@ -316,6 +330,34 @@
         }, 50); 
     }
 
+    // --- NEW: RENDER HINT BUTTON ---
+    function renderHintButton() {
+        const hintBtnContainer = document.getElementById('hint-btn-container');
+        hintBtnContainer.innerHTML = ''; // Clear previous button/message
+        
+        // Show button if only one chance remains AND hint hasn't been used
+        if (currentState.mistakes === currentState.maxMistakes - 1 && !currentState.hintUsed) {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-secondary';
+            btn.style.fontSize = '0.9rem';
+            btn.style.padding = '10px 20px';
+            btn.textContent = '💡 Use Hint (Last Chance!)';
+            btn.onclick = useHint;
+            hintBtnContainer.appendChild(btn);
+        }
+    }
+
+    // --- NEW: USE HINT LOGIC ---
+    function useHint() {
+        if (currentState.status !== 'playing' || currentState.hintUsed) return;
+
+        const hint = wordHints[currentState.word];
+        setStatusMessage(`Hint: ${hint}`, '--accent'); // Use accent color for hint
+        currentState.hintUsed = true; // Mark hint as used
+        renderHintButton(); // Hide the button
+    }
+
+
     // --- CORE FUNCTIONS ---
     function startGame() {
         setStatusMessage("", '--text');
@@ -337,12 +379,14 @@
         currentState.guessed = [];
         currentState.mistakes = 0;
         currentState.status = 'playing';
+        currentState.hintUsed = false; // Reset hint status
 
         // Update UI
         document.getElementById('display-name').textContent = currentState.playerName;
         document.getElementById('display-diff').textContent = currentState.difficulty;
-        setStatusMessage("", '--text'); // Clear status message
-
+        
+        setStatusMessage("", '--text'); 
+        
         // Reset Visuals
         for(let i=0; i<6; i++) {
             const part = document.getElementById(`part-${i}`);
@@ -351,6 +395,7 @@
 
         renderWord();
         renderKeyboard();
+        renderHintButton(); // Ensure button is hidden at start
         switchScreen('game');
     }
 
@@ -384,15 +429,16 @@
         if (!currentState.word.includes(letter)) {
             document.getElementById(`part-${currentState.mistakes}`).style.display = 'block';
             currentState.mistakes++;
-            // FIX: Pass the CSS variable name string
-            setStatusMessage("Ouch!", '--primary'); 
+            
+            setStatusMessage("Ouch!", '--primary');
+
         } else {
-            // FIX: Pass the CSS variable name string
             setStatusMessage("Nice!", '--secondary');
         }
 
         renderWord();
         renderKeyboard();
+        renderHintButton(); // Check if the button needs to appear
 
         if (currentState.word.split('').every(l => currentState.guessed.includes(l))) endGame(true);
         else if (currentState.mistakes >= currentState.maxMistakes) endGame(false);
@@ -404,15 +450,16 @@
         if (supabaseClient) {
             toggleLoader(true);
             try {
+                 // Pass the new hintUsed state to the database
                  await supabaseClient.from('game_history').insert({
                     player_name: currentState.playerName,
                     result: currentState.status,
                     word: currentState.word,
-                    difficulty: currentState.difficulty.toString()
+                    difficulty: currentState.difficulty.toString(),
+                    hint_used: currentState.hintUsed // NEW COLUMN INSERTED
                 });
             } catch (e) {
                 console.error("Supabase Save Error:", e);
-                // The 401 error happens here. Game continues, but score isn't saved.
             }
             toggleLoader(false);
         }
@@ -429,10 +476,11 @@
         }
         
         toggleLoader(true);
+        // Fetch the hint_used column to display on the leaderboard
         const { data, error } = await supabaseClient
             .from('game_history')
-            .select('player_name, difficulty, word')
-            .eq('result', 'win')
+            .select('player_name, difficulty, word, hint_used') 
+            .eq('result', 'won')
             .order('difficulty', { ascending: false })
             .order('created_at', { ascending: false })
             .limit(10);
@@ -442,17 +490,19 @@
         container.innerHTML = '';
         
         if (error) {
-             container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks. Did you set up the RLS Policy?</p>";
+             container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks.</p>";
              console.error("Leaderboard Fetch Error:", error);
         } else if (data && data.length) {
             const ul = document.createElement('ul');
             ul.className = 'leaderboard-list';
             data.forEach((entry, i) => {
+                const hintStatus = entry.hint_used ? '💡 Used Hint' : '✅ No Hint'; // Display hint status
                 const li = document.createElement('li');
                 li.className = 'leaderboard-item';
                 li.innerHTML = `
                     <span>#${i+1} <strong>${entry.player_name}</strong></span> 
                     <span>Lvl ${entry.difficulty} (${entry.word})</span>
+                    <span style="font-size: 0.8rem; color: #636e72;">${hintStatus}</span>
                 `;
                 ul.appendChild(li);
             });
