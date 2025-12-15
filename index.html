@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haptic Hangman</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --bg-color: #f0f4f8;
+            --primary: #FF6B6B; /* Red/Error */
+            --primary-dark: #e05555;
+            --secondary: #4ECDC4; /* Teal/Success */
+            --secondary-dark: #3dbdb5;
+            --accent: #FFE66D; /* Yellow/Accent */
+            --text: #2d3436;
+            --shadow: rgba(0, 0, 0, 0.2);
+            --key-shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        /* --- GLOBAL STYLES --- */
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 25px;
+            box-shadow: 0 15px 30px var(--shadow);
+            text-align: center;
+            width: 95%;
+            max-width: 600px;
+            position: relative;
+            border: 5px solid var(--text);
+            /* Card Pop Animation */
+            animation: cardPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.27) forwards;
+        }
+
+        @keyframes cardPop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        h1, h2 { 
+            font-family: 'Fredoka One', cursive; 
+            color: var(--primary); 
+            text-shadow: 2px 2px 0 var(--accent); /* Extra playful effect */
+            margin-top: 0.5rem;
+        }
+
+        /* --- HAPTIC BUTTONS --- */
+        .btn {
+            font-family: 'Fredoka One', cursive;
+            border: 2px solid var(--text);
+            padding: 15px 28px;
+            font-size: 1.2rem;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.1s;
+            background-color: var(--secondary);
+            color: var(--text);
+            box-shadow: 5px 5px 0 var(--text); /* Stronger shadow for 3D effect */
+            margin: 10px 8px;
+            line-height: 1;
+            font-weight: 700;
+        }
+
+        .btn:active {
+            box-shadow: 0 0 0 var(--text);
+            transform: translate(5px, 5px); /* Move equal to the shadow for click depth */
+        }
+
+        .btn-secondary {
+            background-color: var(--accent);
+        }
+
+        .btn:disabled {
+            background-color: #bdc3c7;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* --- INPUT & SELECT --- */
+        input, select {
+            width: 100%; 
+            padding: 18px; 
+            margin: 15px 0;
+            border: 3px solid #dfe6e9; 
+            border-radius: 12px;
+            font-size: 1.1rem; 
+            font-family: 'Nunito', sans-serif;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-weight: 700;
+        }
+        input:focus, select:focus { 
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 4px rgba(78, 205, 196, 0.3); /* Focus ring */
+        }
+        .error-border { 
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
+        }
+
+        /* --- VIEWS --- */
+        .view { display: none; padding-top: 10px;}
+        .view.active { display: block; animation: fadeIn 0.4s ease; }
+
+        /* --- GAME ELEMENTS --- */
+        .hangman-drawing { height: 180px; margin-bottom: 10px; }
+        .hangman-part { stroke: var(--text); stroke-width: 5; fill: none; display: none; }
+        .base-draw { stroke: #b2bec3; stroke-width: 5; }
+
+        .word-display { 
+            font-family: 'Fredoka One', cursive; 
+            font-size: 2.5rem; 
+            letter-spacing: 8px; 
+            margin: 30px 0; 
+            min-height: 60px;
+        }
+
+        /* --- KEYBOARD REFINEMENT --- */
+        .keyboard { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(40px, 1fr)); 
+            gap: 6px; 
+            margin-top: 20px; 
+        }
+        .key {
+            background: #fff; 
+            border: 2px solid var(--text);
+            border-radius: 8px; 
+            padding: 10px 0;
+            font-weight: 900; 
+            font-size: 1.1rem;
+            cursor: pointer; 
+            box-shadow: 0 3px 0 var(--key-shadow);
+            transition: transform 0.05s, box-shadow 0.05s;
+        }
+        .key:active { transform: translateY(3px); box-shadow: none; }
+        .key.correct { 
+            background: var(--secondary); 
+            color: white; 
+            border-color: var(--secondary-dark); 
+            box-shadow: 0 3px 0 var(--secondary-dark);
+        }
+        .key.wrong { 
+            background: var(--primary); 
+            color: white; 
+            opacity: 0.8;
+            border-color: var(--primary-dark);
+            box-shadow: 0 3px 0 var(--primary-dark);
+        }
+        
+        /* --- STATUS MESSAGE ANIMATION --- */
+        #status-msg {
+            height: 25px; 
+            font-weight: 900; 
+            font-size: 1.3rem;
+            animation: none;
+        }
+        .status-animate {
+            animation: statusPop 0.3s ease-out forwards;
+        }
+        @keyframes statusPop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* --- LEADERBOARD --- */
+        .leaderboard-list { list-style: none; padding: 0; max-height: 350px; overflow-y: auto; text-align: left; }
+        .leaderboard-item { 
+            background: #fdfdfd; 
+            border: 2px solid #eee;
+            margin-bottom: 8px;
+            padding: 12px; 
+            border-radius: 10px;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .leaderboard-item strong { color: var(--text); font-weight: 900; }
+        .leaderboard-item span { color: #636e72; font-weight: 700; }
+
+        #loading { /* Kept simple for utility */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.95); 
+            display: none; justify-content: center; align-items: center; 
+            z-index: 100; font-weight: bold; font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading">Loading...</div>
+
+<div class="container">
+    <div id="start-screen" class="view active">
+        <h1>HANGMAN</h1>
+        <input type="text" id="player-name" placeholder="Enter your name" maxlength="12">
+        <select id="difficulty">
+            <option value="1">Level 1: Very Easy</option>
+            <option value="2">Level 2: Easy</option>
+            <option value="3" selected>Level 3: Medium</option>
+            <option value="4">Level 4: Hard</option>
+            <option value="5">Level 5: Impossible</option>
+        </select>
+        <button class="btn" onclick="startGame()">▶ Play Now</button>
+        <button class="btn btn-secondary" onclick="showLeaderboard()">🏆 Leaderboard</button>
+    </div>
+
+    <div id="game-screen" class="view">
+        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size: 1.1rem; margin-bottom: 10px;">
+            <span id="display-name"></span>
+            <span>Level <span id="display-diff"></span></span>
+        </div>
+        
+        <svg class="hangman-drawing" viewBox="0 0 200 200">
+            <line x1="20" y1="190" x2="180" y2="190" class="base-draw"/>
+            <line x1="50" y1="190" x2="50" y2="20" class="base-draw"/>
+            <line x1="50" y1="20" x2="120" y2="20" class="base-draw"/>
+            <line x1="120" y1="20" x2="120" y2="40" class="base-draw"/>
+            <circle id="part-0" cx="120" cy="60" r="20" class="hangman-part"/>
+            <line id="part-1" x1="120" y1="80" x2="120" y2="140" class="hangman-part"/>
+            <line id="part-2" x1="120" y1="100" x2="90" y2="130" class="hangman-part"/>
+            <line id="part-3" x1="120" y1="100" x2="150" y2="130" class="hangman-part"/>
+            <line id="part-4" x1="120" y1="140" x2="90" y2="170" class="hangman-part"/>
+            <line id="part-5" x1="120" y1="140" x2="150" y2="170" class="hangman-part"/>
+        </svg>
+
+        <div id="word-container" class="word-display"></div>
+        <div id="status-msg"></div>
+        <div id="keyboard-container" class="keyboard"></div>
+        <button class="btn btn-secondary" style="margin-top:20px; font-size:0.9rem; padding:10px 20px;" onclick="switchScreen('start')">Quit Game</button>
+    </div>
+
+    <div id="end-screen" class="view">
+        <h2 id="end-title"></h2>
+        <p style="font-size: 1.1rem; font-weight: 700;">The word was: <strong id="reveal-word" style="font-size:1.5rem; color:var(--text);"></strong></p>
+        <button class="btn" onclick="startGame()">Play Again</button>
+        <button class="btn btn-secondary" onclick="showLeaderboard()">Check Ranks</button>
+    </div>
+
+    <div id="leaderboard-screen" class="view">
+        <h2>🏆 Top 10 Winners</h2>
+        <div id="leaderboard-content"></div>
+        <button class="btn btn-secondary" onclick="switchScreen('start')">Back to Menu</button>
+    </div>
+</div>
+
+<script>
+    // --- SUPABASE CONFIGURATION (FROM PREVIOUS STEP) ---
+    
+    
+    const SUPABASE_URL = 'https://nxodlukpeflttnlzyqiu.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54b2RsdWtwZWZsdHRubHp5cWl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3OTczNTYsImV4cCI6MjA4MTM3MzM1Nn0.MG1a95bPWMgP32yZ240-XXxYm_DPx2D8Tkb8eZygPlM';
+    
+    let supabaseClient = null;
+    if (typeof supabase !== 'undefined') {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } 
+
+    // --- GAME DATA ---
+    const wordsByDifficulty = {
+        1: ["CAT", "DOG", "SUN", "BOX", "SKY", "RED", "FOX"],
+        2: ["APPLE", "TIGER", "HOUSE", "CHAIR", "TABLE", "SMILE"],
+        3: ["PLANET", "JUNGLE", "SILVER", "DOCTOR", "WINDOW", "SUMMER"],
+        4: ["PYRAMID", "BICYCLE", "CALENDAR", "OCTOPUS", "DIAMOND"],
+        5: ["PNEUMONIA", "RHYTHM", "SPHINX", "JAZZ", "VORTEX", "QUARTZ"]
+    };
+
+    let currentState = {
+        playerName: "", difficulty: 3, word: "", guessed: [], mistakes: 0, maxMistakes: 6, status: 'playing' 
+    };
+
+    // --- UTILS ---
+    function switchScreen(name) {
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById(name + '-screen').classList.add('active');
+    }
+
+    function toggleLoader(show) {
+        document.getElementById('loading').style.display = show ? 'flex' : 'none';
+    }
+    
+    // NEW UTILITY FOR UI FEEDBACK
+    function setStatusMessage(message, cssVariable) {
+        const msgEl = document.getElementById('status-msg');
+        
+        // Clear previous animation (needed to re-trigger)
+        msgEl.classList.remove('status-animate'); 
+        
+        // Use setTimeout to force DOM reflow before adding the class back
+        setTimeout(() => {
+            msgEl.textContent = message;
+
+            // FIX: Set the color property using the var() function call
+            msgEl.style.color = `var(${cssVariable})`; 
+
+            msgEl.classList.add('status-animate');
+        }, 50); 
+    }
+
+    // --- CORE FUNCTIONS ---
+    function startGame() {
+        setStatusMessage("", '--text');
+        const nameInput = document.getElementById('player-name');
+        const diffSelect = document.getElementById('difficulty');
+
+        if (!nameInput.value.trim()) {
+            nameInput.classList.add('error-border');
+            nameInput.placeholder = "NAME REQUIRED!";
+            return;
+        }
+        nameInput.classList.remove('error-border');
+
+        // Setup State
+        currentState.playerName = nameInput.value.trim();
+        currentState.difficulty = parseInt(diffSelect.value);
+        const wordList = wordsByDifficulty[currentState.difficulty];
+        currentState.word = wordList[Math.floor(Math.random() * wordList.length)];
+        currentState.guessed = [];
+        currentState.mistakes = 0;
+        currentState.status = 'playing';
+
+        // Update UI
+        document.getElementById('display-name').textContent = currentState.playerName;
+        document.getElementById('display-diff').textContent = currentState.difficulty;
+        setStatusMessage("", '--text'); // Clear status message
+
+        // Reset Visuals
+        for(let i=0; i<6; i++) {
+            const part = document.getElementById(`part-${i}`);
+            if(part) part.style.display = 'none';
+        }
+
+        renderWord();
+        renderKeyboard();
+        switchScreen('game');
+    }
+
+    function renderWord() {
+        const display = currentState.word.split('').map(letter => 
+            currentState.guessed.includes(letter) ? letter : '_'
+        ).join(' ');
+        document.getElementById('word-container').textContent = display;
+    }
+
+    function renderKeyboard() {
+        const container = document.getElementById('keyboard-container');
+        container.innerHTML = '';
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').forEach(letter => {
+            const btn = document.createElement('button');
+            btn.textContent = letter;
+            btn.className = 'key';
+            if (currentState.guessed.includes(letter)) {
+                btn.style.pointerEvents = 'none';
+                btn.classList.add(currentState.word.includes(letter) ? 'correct' : 'wrong');
+            }
+            btn.onclick = () => handleGuess(letter);
+            container.appendChild(btn);
+        });
+    }
+
+    function handleGuess(letter) {
+        if (currentState.status !== 'playing') return;
+        currentState.guessed.push(letter);
+        
+        if (!currentState.word.includes(letter)) {
+            document.getElementById(`part-${currentState.mistakes}`).style.display = 'block';
+            currentState.mistakes++;
+            // FIX: Pass the CSS variable name string
+            setStatusMessage("Ouch!", '--primary'); 
+        } else {
+            // FIX: Pass the CSS variable name string
+            setStatusMessage("Nice!", '--secondary');
+        }
+
+        renderWord();
+        renderKeyboard();
+
+        if (currentState.word.split('').every(l => currentState.guessed.includes(l))) endGame(true);
+        else if (currentState.mistakes >= currentState.maxMistakes) endGame(false);
+    }
+
+    async function endGame(isWin) {
+        currentState.status = isWin ? 'won' : 'lost';
+        
+        if (supabaseClient) {
+            toggleLoader(true);
+            try {
+                 await supabaseClient.from('game_history').insert({
+                    player_name: currentState.playerName,
+                    result: currentState.status,
+                    word: currentState.word,
+                    difficulty: currentState.difficulty.toString()
+                });
+            } catch (e) {
+                console.error("Supabase Save Error:", e);
+                // The 401 error happens here. Game continues, but score isn't saved.
+            }
+            toggleLoader(false);
+        }
+
+        document.getElementById('end-title').textContent = isWin ? "YOU WON! 🎉" : "GAME OVER 💀";
+        document.getElementById('reveal-word').textContent = currentState.word;
+        switchScreen('end');
+    }
+
+    async function showLeaderboard() {
+        if (!supabaseClient) {
+            alert("Database not connected. Cannot fetch leaderboard.");
+            return;
+        }
+        
+        toggleLoader(true);
+        const { data, error } = await supabaseClient
+            .from('game_history')
+            .select('player_name, difficulty, word')
+            .eq('result', 'win')
+            .order('difficulty', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(10);
+        toggleLoader(false);
+
+        const container = document.getElementById('leaderboard-content');
+        container.innerHTML = '';
+        
+        if (error) {
+             container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks. Did you set up the RLS Policy?</p>";
+             console.error("Leaderboard Fetch Error:", error);
+        } else if (data && data.length) {
+            const ul = document.createElement('ul');
+            ul.className = 'leaderboard-list';
+            data.forEach((entry, i) => {
+                const li = document.createElement('li');
+                li.className = 'leaderboard-item';
+                li.innerHTML = `
+                    <span>#${i+1} <strong>${entry.player_name}</strong></span> 
+                    <span>Lvl ${entry.difficulty} (${entry.word})</span>
+                `;
+                ul.appendChild(li);
+            });
+            container.appendChild(ul);
+        } else {
+            container.innerHTML = "<p style='font-weight: bold;'>No winners yet! Set the high score!</p>";
+        }
+        switchScreen('leaderboard');
+    }
+</script>
+</body>
+</html>

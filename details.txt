@@ -1,0 +1,3 @@
+
+const SUPABASE_URL = 'https://nxodlukpeflttnlzyqiu.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54b2RsdWtwZWZsdHRubHp5cWl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3OTczNTYsImV4cCI6MjA4MTM3MzM1Nn0.MG1a95bPWMgP32yZ240-XXxYm_DPx2D8Tkb8eZygPlM';
