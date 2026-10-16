@@ -1,577 +1,1299 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Haptic Hangman</title>
+
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
+
+
     <style>
+
         :root {
+
             --bg-color: #f0f4f8;
+
             --primary: #FF6B6B; /* Red/Error */
+
             --primary-dark: #e05555;
+
             --secondary: #4ECDC4; /* Teal/Success */
+
             --secondary-dark: #3dbdb5;
+
             --accent: #FFE66D; /* Yellow/Accent */
+
             --text: #2d3436;
+
             --shadow: rgba(0, 0, 0, 0.2);
+
             --key-shadow: rgba(0, 0, 0, 0.1);
+
         }
+
+
 
         /* --- GLOBAL STYLES --- */
+
         * { box-sizing: border-box; }
 
+
+
         body {
+
             font-family: 'Nunito', sans-serif;
+
             background-color: var(--bg-color);
+
             color: var(--text);
+
             display: flex;
+
             justify-content: center;
+
             align-items: center;
+
             min-height: 100vh;
+
             margin: 0;
+
             padding: 20px;
+
         }
+
+
 
         .container {
+
             background: white;
+
             padding: 2rem;
+
             border-radius: 25px;
+
             box-shadow: 0 15px 30px var(--shadow);
+
             text-align: center;
+
             width: 95%;
+
             max-width: 600px;
+
             position: relative;
+
             border: 5px solid var(--text);
+
             /* Card Pop Animation */
+
             animation: cardPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.27) forwards;
+
         }
+
+
 
         @keyframes cardPop {
+
             0% { transform: scale(0.8); opacity: 0; }
+
             100% { transform: scale(1); opacity: 1; }
+
         }
+
+
 
         h1, h2 { 
+
             font-family: 'Fredoka One', cursive; 
+
             color: var(--primary); 
+
             text-shadow: 2px 2px 0 var(--accent); /* Extra playful effect */
+
             margin-top: 0.5rem;
+
         }
+
+
 
         /* --- HAPTIC BUTTONS --- */
+
         .btn {
+
             font-family: 'Fredoka One', cursive;
+
             border: 2px solid var(--text);
+
             padding: 15px 28px;
+
             font-size: 1.2rem;
+
             border-radius: 15px;
+
             cursor: pointer;
+
             transition: all 0.1s;
+
             background-color: var(--secondary);
+
             color: var(--text);
+
             box-shadow: 5px 5px 0 var(--text); /* Stronger shadow for 3D effect */
+
             margin: 10px 8px;
+
             line-height: 1;
+
             font-weight: 700;
+
         }
+
+
 
         .btn:active {
+
             box-shadow: 0 0 0 var(--text);
+
             transform: translate(5px, 5px); /* Move equal to the shadow for click depth */
+
         }
+
+
 
         .btn-secondary {
+
             background-color: var(--accent);
+
         }
+
+
 
         .btn:disabled {
+
             background-color: #bdc3c7;
+
             box-shadow: none;
+
             cursor: not-allowed;
+
             transform: none;
+
         }
+
+
 
         /* --- INPUT & SELECT --- */
+
         input, select {
+
             width: 100%; 
+
             padding: 18px; 
+
             margin: 15px 0;
+
             border: 3px solid #dfe6e9; 
+
             border-radius: 12px;
+
             font-size: 1.1rem; 
+
             font-family: 'Nunito', sans-serif;
+
             outline: none;
+
             transition: border-color 0.3s, box-shadow 0.3s;
+
             font-weight: 700;
+
         }
+
         input:focus, select:focus { 
+
             border-color: var(--secondary);
+
             box-shadow: 0 0 0 4px rgba(78, 205, 196, 0.3); /* Focus ring */
+
         }
+
         .error-border { 
+
             border-color: var(--primary) !important;
+
             box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.3);
+
         }
+
+
 
         /* --- VIEWS --- */
+
         .view { display: none; padding-top: 10px;}
+
         .view.active { display: block; animation: fadeIn 0.4s ease; }
 
+
+
         /* --- GAME ELEMENTS --- */
+
         .hangman-drawing { height: 180px; margin-bottom: 10px; }
+
         .hangman-part { stroke: var(--text); stroke-width: 5; fill: none; display: none; }
+
         .base-draw { stroke: #b2bec3; stroke-width: 5; }
 
+
+
         .word-display { 
+
             font-family: 'Fredoka One', cursive; 
+
             font-size: 2.5rem; 
+
             letter-spacing: 8px; 
+
             margin: 30px 0; 
+
             min-height: 60px;
+
         }
+
+
 
         /* --- KEYBOARD REFINEMENT --- */
-        .keyboard { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(40px, 1fr)); 
-            gap: 6px; 
-            margin-top: 20px; 
+
+        .keyboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+            gap: 6px;
+            /* Keep the keyboard comfortably below the hint/status area. */
+            margin-top: 34px;
+            padding-bottom: 8px;
+            clear: both;
         }
+
         .key {
+
             background: #fff; 
+
             border: 2px solid var(--text);
+
             border-radius: 8px; 
+
             padding: 10px 0;
+
             font-weight: 900; 
+
             font-size: 1.1rem;
+
             cursor: pointer; 
+
             box-shadow: 0 3px 0 var(--key-shadow);
+
             transition: transform 0.05s, box-shadow 0.05s;
+
         }
+
         .key:active { transform: translateY(3px); box-shadow: none; }
+
         .key.correct { 
+
             background: var(--secondary); 
+
             color: white; 
+
             border-color: var(--secondary-dark); 
+
             box-shadow: 0 3px 0 var(--secondary-dark);
+
         }
+
         .key.wrong { 
+
             background: var(--primary); 
+
             color: white; 
+
             opacity: 0.8;
+
             border-color: var(--primary-dark);
+
             box-shadow: 0 3px 0 var(--primary-dark);
+
         }
-        
+
+
+
         /* --- STATUS MESSAGE ANIMATION --- */
+
         #status-msg {
-            height: 25px; 
-            font-weight: 900; 
-            font-size: 1.3rem;
+            /* Allow long hints to wrap instead of colliding with the keyboard. */
+            min-height: 25px;
+            height: auto;
+            margin: 12px auto 0;
+            padding: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            line-height: 1.45;
+            font-weight: 900;
+            font-size: 1.05rem;
             animation: none;
         }
+
+        /* A clear, readable bordered card for normal and spicy hints. */
+        #status-msg.hint-message {
+            display: block;
+            width: fit-content;
+            max-width: 100%;
+            margin: 12px auto 0;
+            padding: 12px 16px;
+            border: 2px solid var(--text);
+            border-radius: 14px;
+            background: #fffbea;
+            color: var(--text) !important;
+            box-shadow: 0 4px 0 rgba(45, 52, 54, 0.14);
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.5;
+            white-space: normal;
+        }
+
+        #status-msg.hint-message.spicy-hint {
+            border: 2px solid #c02668;
+            background: #fff0f6;
+            box-shadow: 0 4px 0 rgba(192, 38, 104, 0.18);
+        }
+
+        @media (max-width: 480px) {
+            .keyboard {
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 7px;
+                margin-top: 30px;
+            }
+            .key {
+                padding: 12px 0;
+                font-size: 1rem;
+            }
+            #status-msg.hint-message {
+                padding: 10px 12px;
+                font-size: 0.95rem;
+            }
+        }
+
         .status-animate {
+
             animation: statusPop 0.3s ease-out forwards;
+
         }
+
         @keyframes statusPop {
+
             0% { transform: scale(0.8); opacity: 0; }
+
             50% { transform: scale(1.1); opacity: 1; }
+
             100% { transform: scale(1); opacity: 1; }
+
         }
+
+
 
         /* --- LEADERBOARD --- */
+
         .leaderboard-list { list-style: none; padding: 0; max-height: 350px; overflow-y: auto; text-align: left; }
+
         .leaderboard-item { 
+
             background: #fdfdfd; 
+
             border: 2px solid #eee;
+
             margin-bottom: 8px;
+
             padding: 12px; 
+
             border-radius: 10px;
+
             display: flex; 
+
             justify-content: space-between; 
+
             align-items: center;
+
         }
+
         .leaderboard-item strong { color: var(--text); font-weight: 900; }
+
         .leaderboard-item span { color: #636e72; font-weight: 700; }
 
+
+
         #loading { /* Kept simple for utility */
+
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+
             background: rgba(255,255,255,0.95); 
+
             display: none; justify-content: center; align-items: center; 
+
             z-index: 100; font-weight: bold; font-size: 1.5rem;
+
         }
+
     </style>
+
 </head>
+
 <body>
+
+
 
 <div id="loading">Loading...</div>
 
+
+
 <div class="container">
+
     <div id="start-screen" class="view active">
+
         <h1>HANGMAN</h1>
+
         <input type="text" id="player-name" placeholder="Enter your name" maxlength="12">
+
         <select id="difficulty">
+
             <option value="1">Level 1: Very Easy</option>
+
             <option value="2">Level 2: Easy</option>
+
             <option value="3" selected>Level 3: Medium</option>
+
             <option value="4">Level 4: Hard</option>
+
             <option value="5">Level 5: Impossible</option>
+
         </select>
+
         <button class="btn" onclick="startGame()">▶ Play Now</button>
+
         <button class="btn btn-secondary" onclick="showLeaderboard()">🏆 Leaderboard</button>
+
     </div>
+
+
 
     <div id="game-screen" class="view">
+
         <div style="display:flex; justify-content:space-between; font-weight:bold; font-size: 1.1rem; margin-bottom: 10px;">
+
             <span id="display-name"></span>
+
             <span>Level <span id="display-diff"></span></span>
+
         </div>
+
         <div id="hint-btn-container" style="min-height: 40px; margin-top: 10px;">
+
         </div>
+
         <svg class="hangman-drawing" viewBox="0 0 200 200">
+
             <line x1="20" y1="190" x2="180" y2="190" class="base-draw"/>
+
             <line x1="50" y1="190" x2="50" y2="20" class="base-draw"/>
+
             <line x1="50" y1="20" x2="120" y2="20" class="base-draw"/>
+
             <line x1="120" y1="20" x2="120" y2="40" class="base-draw"/>
+
             <circle id="part-0" cx="120" cy="60" r="20" class="hangman-part"/>
+
             <line id="part-1" x1="120" y1="80" x2="120" y2="140" class="hangman-part"/>
+
             <line id="part-2" x1="120" y1="100" x2="90" y2="130" class="hangman-part"/>
+
             <line id="part-3" x1="120" y1="100" x2="150" y2="130" class="hangman-part"/>
+
             <line id="part-4" x1="120" y1="140" x2="90" y2="170" class="hangman-part"/>
+
             <line id="part-5" x1="120" y1="140" x2="150" y2="170" class="hangman-part"/>
+
         </svg>
 
+
+
         <div id="word-container" class="word-display"></div>
+
         <div id="status-msg"></div>
+
         <div id="keyboard-container" class="keyboard"></div>
+
         <button class="btn btn-secondary" style="margin-top:20px; font-size:0.9rem; padding:10px 20px;" onclick="switchScreen('start')">Quit Game</button>
+
     </div>
+
+
 
     <div id="end-screen" class="view">
+
         <h2 id="end-title"></h2>
+
         <p style="font-size: 1.1rem; font-weight: 700;">The word was: <strong id="reveal-word" style="font-size:1.5rem; color:var(--text);"></strong></p>
+
         <button class="btn" onclick="startGame()">Play Again</button>
+
         <button class="btn btn-secondary" onclick="showLeaderboard()">Check Ranks</button>
+
     </div>
 
-    <div id="leaderboard-screen" class="view">
+
+
+        <div id="leaderboard-screen" class="view">
+
         <h2>🏆 Top 10 Winners</h2>
-        <div id="leaderboard-content"></div>
-        <button class="btn btn-secondary" onclick="switchScreen('start')">Back to Menu</button>
-    </div>
-</div>
 
-<script>
+            <div id="leaderboard-content"></div>
+
+            <button class="btn btn-secondary" onclick="switchScreen('start')">Back to Menu</button>
+
+        </div>
+
+        <div id="spice-toggle" style="position: absolute; bottom: 8px; right: 8px; width: 16px; height: 16px; opacity: 0; cursor: pointer; z-index: 10;" title="Toggle spice mode"></div>
+
+    </div>
+
+
+
+    <script>
+
     // --- SUPABASE CONFIGURATION ---
+
     const SUPABASE_URL = 'https://nxodlukpeflttnlzyqiu.supabase.co';
+
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54b2RsdWtwZWZsdHRubHp5cWl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3OTczNTYsImV4cCI6MjA4MTM3MzM1Nn0.MG1a95bPWMgP32yZ240-XXxYm_DPx2D8Tkb8eZygPlM';
-    
+
+
+
     let supabaseClient = null;
+
     if (typeof supabase !== 'undefined') {
+
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     } 
 
+
+
     // --- GAME DATA ---
-    const wordsByDifficulty = {
+
+    let spiceMode = false;
+
+
+
+    const wordsNormal = {
+
         1: ["CAT", "DOG", "SUN", "BOX", "SKY", "RED", "FOX"],
+
         2: ["APPLE", "TIGER", "HOUSE", "CHAIR", "TABLE", "SMILE"],
+
         3: ["PLANET", "JUNGLE", "SILVER", "DOCTOR", "WINDOW", "SUMMER"],
+
         4: ["PYRAMID", "BICYCLE", "CALENDAR", "OCTOPUS", "DIAMOND"],
+
         5: ["PNEUMONIA", "RHYTHM", "SPHINX", "JAZZ", "VORTEX", "QUARTZ"]
+
     };
 
-    const wordHints = {
+
+
+    const hintsNormal = {
+
         "CAT": "A furry pet that meows.", "DOG": "Man's best friend.", "SUN": "Rises in the east.", "BOX": "A container with four sides.", "SKY": "It is blue during the day.", "RED": "A primary color.", "FOX": "A quick, sly animal.",
+
         "APPLE": "A popular fruit often red or green.", "TIGER": "A large striped cat.", "HOUSE": "Where you live.", "CHAIR": "You sit on this.", "TABLE": "Where you eat meals.", "SMILE": "Shows you are happy.",
+
         "PLANET": "Earth is one of these.", "JUNGLE": "A dense tropical forest.", "SILVER": "A precious metal, not gold.", "DOCTOR": "A person who treats the sick.", "WINDOW": "You look outside through this.", "SUMMER": "The hottest season.",
+
         "PYRAMID": "Found in Egypt.", "BICYCLE": "Two wheels, you pedal it.", "CALENDAR": "Used to track dates.", "OCTOPUS": "A sea animal with 8 arms.", "DIAMOND": "A very hard, valuable gemstone.",
+
         "PNEUMONIA": "A lung infection.", "RHYTHM": "Pattern of musical sounds.", "SPHINX": "Mythical creature with a human head.", "JAZZ": "A famous music genre, often improvised.", "VORTEX": "A whirling mass of fluid or air.", "QUARTZ": "A common mineral.",
+
     };
+
+
+
+    const wordsSpice = {
+
+        1: ["PEACH", "CHERRY", "BANANA", "MELON", "FIG"],
+
+        2: ["SAUSAGE", "HOTDOG", "SANDWICH", "MUFFIN", "CORNDOG"],
+
+        3: ["PICKLE", "CUCUMBER", "BRINJAL", "AVOCADO", "PLUM"],
+
+        4: ["CREAM", "HONEY", "DONUT", "TACO", "POPSICLE"],
+
+        5: ["CHEESECAKE", "CHOCOLATE", "WHIPPEDCREAM", "NECTAR", "JELLY"]
+
+    };
+
+
+
+    const hintsSpice = {
+
+        "PEACH": "Soft, round, and super juicy when ready… especially the ones that blush.",
+
+        "CHERRY": "Small, red, and the most fun when you finally get to pop it.",
+
+        "BANANA": "Long, curved, and best enjoyed after you slowly uncover it.",
+
+        "MELON": "Big, heavy, juicy",
+
+        "FIG": "Soft on the outside, sticky-sweet on the inside",
+
+
+
+        "SAUSAGE": "Comes in a tight cover and is at its best when it’s soft and firm.",
+
+        "HOTDOG": "Long, soft, and slides perfectly between things.",
+
+        "SANDWICH": "Two soft things with a thick, juicy filling in the middle.",
+
+        "MUFFIN": "Small, warm, and 🤤 tasty after it rises and hot.",
+
+        "CORNDOG": "A long stick of meat completely covered and ready to be dipped.",
+
+
+
+        "PICKLE": "tasty, firm, and best when it’s long and wet.",
+
+        "CUCUMBER": "Cool, long, and refreshingly firm when you grab it.",
+
+        "BRINJAL": "Smooth, thick, purple, and surprisingly versatile in the kitchen.",
+
+        "AVOCADO": "Creamy, rich, and incredibly satisfying once you get inside.",
+
+        "PLUM": "Soft, dark, and deliciously juicy",
+
+
+
+        "CREAM": "Thick, white, and tends to end up everywhere if you’re not careful.",
+
+        "HONEY": "sticky BUT THE sweeter it is, the messier it gets.",
+
+        "DONUT": "Has soft surrounding with a tasty centre hole which melts in your mouth.",
+
+        "TACO": "hard, crispy outside, spicy filling on the inside.",
+
+        "POPSICLE": "Long, frozen, and leaks the longer you keep it in your mouth.",
+
+
+
+        "CHEESECAKE": "Thick, creamy but a bit sticky.",
+
+        "CHOCOLATE": "hard, black, and melts the moment it hits your tongue.",
+
+        "WHIPPEDCREAM": "Light, fluffy, and perfect for topping… or being topped.",
+
+        "NECTAR": "Sweet, sticky liquid that drips when SOMEONE PUTS THINGS INSIDE.",
+
+        "JELLY": "SHAKEY, sweet, and spreads easily once you START."
+
+    };
+
+
+
+    let wordsByDifficulty = wordsNormal;
+
+    let wordHints = hintsNormal;
+
+
 
     let currentState = {
+
         playerName: "", 
+
         difficulty: 3, 
+
         word: "", 
+
         guessed: [], 
+
         mistakes: 0, 
+
         maxMistakes: 6, 
+
         status: 'playing',
+
         hintUsed: false 
+
     };
 
-    // --- UTILS ---
-    function switchScreen(name) {
-        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-        document.getElementById(name + '-screen').classList.add('active');
+
+
+    function applySpiceMode(enabled) {
+        spiceMode = enabled;
+        wordsByDifficulty = spiceMode ? wordsSpice : wordsNormal;
+        wordHints = spiceMode ? hintsSpice : hintsNormal;
+
+        // A hidden-mode change resets hint availability for the active round.
+        // The current word stays unchanged; the new dictionary applies next round.
+        if (currentState.status === 'playing') {
+            currentState.hintUsed = false;
+            renderHintButton();
+        }
+        console.log(spiceMode ? 'Spice Mode enabled' : 'Normal mode enabled');
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+
+        const toggle = document.getElementById('spice-toggle');
+
+        if (toggle) {
+
+            toggle.addEventListener('click', function() {
+
+                applySpiceMode(!spiceMode);
+
+            });
+
+        }
+
+    });
+
+
+
+    // --- UTILS ---
+
+    function switchScreen(name) {
+
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+
+        document.getElementById(name + '-screen').classList.add('active');
+
+    }
+
+
 
     function toggleLoader(show) {
+
         document.getElementById('loading').style.display = show ? 'flex' : 'none';
-    }
-    
-    function setStatusMessage(message, cssVariable) {
-        const msgEl = document.getElementById('status-msg');
-        msgEl.classList.remove('status-animate'); 
-        
-        setTimeout(() => {
-            msgEl.textContent = message;
-            msgEl.style.color = `var(${cssVariable})`; 
-            msgEl.classList.add('status-animate');
-        }, 50); 
+
     }
 
+
+
+    function setStatusMessage(message, cssVariable) {
+
+        const msgEl = document.getElementById('status-msg');
+        const isHint = message.startsWith('Hint:') || message.startsWith('🔥 Spicy Hint:');
+        const isSpicyHint = message.startsWith('🔥 Spicy Hint:');
+
+        msgEl.classList.remove('status-animate', 'hint-message', 'spicy-hint');
+        if (isHint) {
+            msgEl.classList.add('hint-message');
+            if (isSpicyHint) msgEl.classList.add('spicy-hint');
+        }
+
+        setTimeout(() => {
+            msgEl.textContent = message;
+            msgEl.style.color = `var(${cssVariable})`;
+            msgEl.classList.add('status-animate');
+        }, 50); 
+
+    }
+
+
+
     // --- HINT LOGIC ---
+
     function renderHintButton() {
         const hintBtnContainer = document.getElementById('hint-btn-container');
-        if (!hintBtnContainer) return; 
+        if (!hintBtnContainer) return;
+
         hintBtnContainer.innerHTML = '';
-        
-        if (currentState.mistakes === currentState.maxMistakes - 1 && !currentState.hintUsed) {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-secondary';
-            btn.style.fontSize = '0.9rem';
-            btn.style.padding = '10px 20px';
-            btn.textContent = '💡 Use Hint (Last Chance!)';
-            btn.onclick = useHint;
-            hintBtnContainer.appendChild(btn);
-        }
+        if (currentState.status !== 'playing') return;
+
+        // In normal mode, a hint is available once. In Spice Mode, it stays available.
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.style.fontSize = '0.9rem';
+        btn.style.padding = '10px 20px';
+        btn.textContent = spiceMode
+            ? '🔥 Reveal Spicy Hint'
+            : (currentState.hintUsed ? 'Hint Used' : 'Use Hint (Last Chance!)');
+        btn.disabled = currentState.hintUsed && !spiceMode;
+        btn.onclick = useHint;
+        hintBtnContainer.appendChild(btn);
     }
 
     function useHint() {
-        if (currentState.status !== 'playing' || currentState.hintUsed) return;
+        if (currentState.status !== 'playing') return;
+        if (currentState.hintUsed && !spiceMode) return;
 
         const hint = wordHints[currentState.word];
-        setStatusMessage(`Hint: ${hint}`, '--accent'); 
-        currentState.hintUsed = true; 
-        renderHintButton(); 
+        if (!hint) return;
+
+        currentState.hintUsed = true;
+        setStatusMessage(`${spiceMode ? '🔥 Spicy Hint: ' : 'Hint: '}${hint}`, '--accent');
+        renderHintButton();
     }
 
     // --- CORE LOGIC CHANGE: WEIGHTED SCORE ---
+
     // --- UPDATED: USER SUMMARY LOGIC WITH HINT PENALTY ---
+
     async function updateUserSummary(isWin) {
+
         if (!supabaseClient) return;
-    
+
+
+
         const playerName = currentState.playerName;
+
         const currentDifficulty = currentState.difficulty;
-        
+
+
+
         let pointsGained = 0;
-    
+
+
+
         if (isWin) {
-            if (currentState.hintUsed) {
+
+            if (currentState.hintUsed && !spiceMode) {
+
                 // Rule: Win occurred, but hint was used. No score added.
+
                 pointsGained = 0;
+
                 console.log(`Score update: Player ${playerName} won but used hint. Score penalty applied.`);
+
             } else {
+
                 // Rule: Win occurred, and hint was NOT used. Add full difficulty points.
+
                 pointsGained = currentDifficulty;
+
                 console.log(`Score update: Player ${playerName} won without hint. Gained ${pointsGained} points.`);
+
             }
+
         } else {
+
             // Rule: Lost the game. No score added.
+
             pointsGained = 0;
+
         }
-    
+
+
+
         try {
+
             let { data: userData, error: fetchError } = await supabaseClient
+
                 .from('users_summary')
+
                 .select('*')
+
                 .eq('name', playerName)
+
                 .single();
-        
+
+
+
             if (fetchError && fetchError.code !== 'PGRST116') { 
+
                  throw fetchError;
+
             }
-        
+
+
+
             const isNewUser = !userData;
-            
+
+
+
             // Get existing score
+
             const existingWeightedScore = isNewUser ? 0 : userData.weighted_score;
+
             const existingTotalWins = isNewUser ? 0 : userData.total_wins;
-        
+
+
+
             let updatePayload = {
+
                 name: playerName,
+
                 total_matches: (isNewUser ? 0 : userData.total_matches) + 1,
-                
+
+
+
                 // ADD the calculated pointsGained (0 or Difficulty)
+
                 weighted_score: existingWeightedScore + pointsGained,
-                
+
+
+
                 // Total wins still increments whether or not the hint was used (A win is still a win)
+
                 total_wins: existingTotalWins + (isWin ? 1 : 0),
+
             };
-        
+
+
+
             const { error: upsertError } = await supabaseClient
+
                 .from('users_summary')
+
                 .upsert(updatePayload, { onConflict: 'name' }); 
-        
+
+
+
             if (upsertError) throw upsertError;
-        
+
+
+
         } catch (e) {
+
             console.error("Error updating user summary:", e);
+
         }
+
     }
+
     // --- CORE FUNCTIONS ---
+
     function startGame() {
+
         const nameInput = document.getElementById('player-name');
+
         const diffSelect = document.getElementById('difficulty');
 
+
+
         if (!nameInput.value.trim()) {
+
             nameInput.classList.add('error-border');
+
             nameInput.placeholder = "NAME REQUIRED!";
+
             return;
+
         }
+
         nameInput.classList.remove('error-border');
 
+
+
         // Setup State
+
         currentState.playerName = nameInput.value.trim();
+
         currentState.difficulty = parseInt(diffSelect.value);
+
         const wordList = wordsByDifficulty[currentState.difficulty];
+
         currentState.word = wordList[Math.floor(Math.random() * wordList.length)];
+
         currentState.guessed = [];
+
         currentState.mistakes = 0;
+
         currentState.status = 'playing';
+
         currentState.hintUsed = false; 
 
+
+
         // Update UI
+
         document.getElementById('display-name').textContent = currentState.playerName;
+
         document.getElementById('display-diff').textContent = currentState.difficulty;
-        
+
+
+
         setStatusMessage("", '--text'); 
-        
+
+
+
         // Reset Visuals
+
         for(let i=0; i<6; i++) {
+
             const part = document.getElementById(`part-${i}`);
+
             if(part) part.style.display = 'none';
+
         }
 
+
+
         renderWord();
+
         renderKeyboard();
+
         renderHintButton();
+
         switchScreen('game');
+
     }
+
+
 
     function renderWord() {
+
         const display = currentState.word.split('').map(letter => 
+
             currentState.guessed.includes(letter) ? letter : '_'
+
         ).join(' ');
+
         document.getElementById('word-container').textContent = display;
+
     }
+
+
 
     function renderKeyboard() {
+
         const container = document.getElementById('keyboard-container');
+
         container.innerHTML = '';
+
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').forEach(letter => {
+
             const btn = document.createElement('button');
+
             btn.textContent = letter;
+
             btn.className = 'key';
+
             if (currentState.guessed.includes(letter)) {
+
                 btn.style.pointerEvents = 'none';
+
                 btn.classList.add(currentState.word.includes(letter) ? 'correct' : 'wrong');
+
             }
+
             btn.onclick = () => handleGuess(letter);
+
             container.appendChild(btn);
+
         });
+
     }
+
+
 
     function handleGuess(letter) {
+
         if (currentState.status !== 'playing') return;
+
         currentState.guessed.push(letter);
-        
+
+
+
         if (!currentState.word.includes(letter)) {
+
             document.getElementById(`part-${currentState.mistakes}`).style.display = 'block';
+
             currentState.mistakes++;
+
             setStatusMessage("Ouch!", '--primary');
+
         } else {
+
             setStatusMessage("Nice!", '--secondary');
+
         }
+
+
 
         renderWord();
+
         renderKeyboard();
+
         renderHintButton(); 
 
+
+
         if (currentState.word.split('').every(l => currentState.guessed.includes(l))) endGame(true);
+
         else if (currentState.mistakes >= currentState.maxMistakes) endGame(false);
+
     }
+
+
 
     async function endGame(isWin) {
+
         currentState.status = isWin ? 'won' : 'lost';
-        
+
+
+
         if (supabaseClient) {
+
             toggleLoader(true);
-            
+
+
+
             // 1. Update the dedicated summary table
+
             await updateUserSummary(isWin);
 
+
+
             // 2. Insert the detailed game log
+
             try {
+
                  await supabaseClient.from('game_history').insert({
+
                     player_name: currentState.playerName,
+
                     result: currentState.status,
+
                     word: currentState.word,
+
                     difficulty: currentState.difficulty.toString(),
+
                     hint_used: currentState.hintUsed 
+
                 });
+
             } catch (e) {
+
                 console.error("Supabase Game History Save Error:", e);
+
             }
+
             toggleLoader(false);
+
         }
+
+
 
         document.getElementById('end-title').textContent = isWin ? "YOU WON! 🎉" : "GAME OVER 💀";
+
         document.getElementById('reveal-word').textContent = currentState.word;
+
         switchScreen('end');
+
     }
+
+
 
     // --- LEADERBOARD: NOW SORTING BY WEIGHTED SCORE ---
+
     async function showLeaderboard() {
+
         if (!supabaseClient) {
+
             alert("Database not connected. Cannot fetch leaderboard.");
+
             return;
+
         }
-        
+
+
+
         toggleLoader(true);
+
         const { data, error } = await supabaseClient
+
             .from('users_summary')
+
             .select('*') 
+
             // NEW SORT: weighted_score is now the primary ranking metric
+
             .order('weighted_score', { ascending: false }) 
+
             .order('total_wins', { ascending: false })
+
             .limit(10);
+
         toggleLoader(false);
 
+
+
         const container = document.getElementById('leaderboard-content');
+
         container.innerHTML = '';
-        
+
+
+
         if (error) {
+
              container.innerHTML = "<p style='color: var(--primary); font-weight: bold;'>Error fetching ranks. (Check RLS on users_summary table)</p>";
+
              console.error("Leaderboard Fetch Error:", error);
+
         } else if (data && data.length) {
+
             const ul = document.createElement('ul');
+
             ul.className = 'leaderboard-list';
+
             data.forEach((entry, i) => {
+
                 const li = document.createElement('li');
+
                 li.className = 'leaderboard-item';
+
                 li.innerHTML = `
+
                     <div style="flex-basis: 30%;">
+
                         #${i+1} <strong>${entry.name}</strong>
+
                     </div>
+
                     <div style="flex-basis: 45%; text-align: center; color: var(--primary); font-size: 1.2rem; font-weight: 900;">
+
                         ⭐ Score: ${entry.weighted_score}
+
                     </div>
+
                     <div style="flex-basis: 25%; text-align: right;">
+
                         🏆 Wins: ${entry.total_wins}
+
                     </div>
+
                 `;
+
                 ul.appendChild(li);
+
             });
+
             container.appendChild(ul);
+
         } else {
+
             container.innerHTML = "<p style='font-weight: bold;'>No players yet! Play a game to be the first!</p>";
+
         }
+
         switchScreen('leaderboard');
+
     }
+
 </script>
+
 </body>
+
 </html>
